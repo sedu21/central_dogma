@@ -1,0 +1,1001 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>단백질 합성 시뮬레이터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: lab-bench stage on top (scrollable mRNA track), controls under it, explanation + site table to the side; codon table and concept check below. */
+:root{
+  --bg:#EDF1EF; --surface:#FFFFFF; --surface-2:#F5F8F6; --ink:#1A2420; --muted:#5B6964; --line:#D2DBD7;
+  --accent:#1E6B58; --accent-ink:#FFFFFF; --accent-soft:#DCEDE6;
+  --ribo:#E6BC6C; --ribo-2:#D3A24A; --ribo-edge:#B88733;
+  --mrna:#9A3D8E; --trna:#3E7D8D; --trna-init:#B4572E; --rf:#6A4FB0;
+  --A:#3B9A49; --U:#CF4438; --G:#D99A12; --C:#3A6CC2;
+  --A-t:#E1F1E3; --U-t:#F8E1DE; --G-t:#F8EDCF; --C-t:#DFE8F8;
+  --good:#1F7A4A; --bad:#B23A2E; --hl:#FFF2B8;
+  --nuc:#EEE7F4; --nuc-edge:#B49CCB; --dna:#2D6AA3; --dna-2:#6FA3D6; --pol:#5E8F2F; --enz:#C0612F;
+  --f-display:"Gowun Batang", "Nanum Myeongjo", serif;
+  --f-body:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --dur:700ms;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121816; --surface:#1B2320; --surface-2:#202A26; --ink:#E5ECE8; --muted:#9AA9A3; --line:#2F3B36;
+  --accent:#5CC3A3; --accent-ink:#0E1A16; --accent-soft:#1F3B32;
+  --ribo:#B98D43; --ribo-2:#9E7533; --ribo-edge:#D7AE62;
+  --mrna:#CD72C0; --trna:#5FA9BA; --trna-init:#E07E52; --rf:#9A82E0;
+  --A:#5DC46B; --U:#F06A5D; --G:#F0B83A; --C:#6E9BEB;
+  --A-t:#1E3523; --U-t:#3B211E; --G-t:#3A3018; --C-t:#1D2A40;
+  --good:#5CCB8C; --bad:#F07B6E; --hl:#4A4220;
+  --nuc:#271F31; --nuc-edge:#7A659A; --dna:#6FA8E0; --dna-2:#3F78B5; --pol:#86B84F; --enz:#D9784A;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#121816; --surface:#1B2320; --surface-2:#202A26; --ink:#E5ECE8; --muted:#9AA9A3; --line:#2F3B36;
+  --accent:#5CC3A3; --accent-ink:#0E1A16; --accent-soft:#1F3B32;
+  --ribo:#B98D43; --ribo-2:#9E7533; --ribo-edge:#D7AE62;
+  --mrna:#CD72C0; --trna:#5FA9BA; --trna-init:#E07E52; --rf:#9A82E0;
+  --A:#5DC46B; --U:#F06A5D; --G:#F0B83A; --C:#6E9BEB;
+  --A-t:#1E3523; --U-t:#3B211E; --G-t:#3A3018; --C-t:#1D2A40;
+  --good:#5CCB8C; --bad:#F07B6E; --hl:#4A4220;
+  --nuc:#271F31; --nuc-edge:#7A659A; --dna:#6FA8E0; --dna-2:#3F78B5; --pol:#86B84F; --enz:#D9784A;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:24px 56px;display:flex;flex-direction:column;gap:20px}
+header .eyebrow{font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:600}
+header h1{font-family:var(--f-display);font-size:clamp(26px,4vw,36px);line-height:1.2;margin:4px 0 6px;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:62ch}
+code,.mono{font-family:var(--f-mono);font-weight:600}
+
+/* input bar */
+.inputbar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:12px;color:var(--muted);font-weight:600}
+.field.grow{flex:1 1 280px}
+select,input[type=text]{font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+input[type=text]{font-family:var(--f-mono);letter-spacing:.06em;width:100%}
+.err{flex-basis:100%;color:var(--bad);font-size:13px;margin:0}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);padding:8px 14px;font-weight:600}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* main grid */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}}
+.stagecard{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;min-width:0}
+.stagehead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.tracker{display:flex;gap:6px;flex-wrap:wrap}
+.tracker span{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.tracker span.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.tracker span.done{color:var(--accent);border-color:var(--accent)}
+.progress{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.stage{overflow-x:auto;background:
+  radial-gradient(circle at 1px 1px, color-mix(in srgb,var(--muted) 22%, transparent) 1px, transparent 1.5px) 0 0/22px 22px, var(--surface-2)}
+.stage svg{display:block}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.controls .sp{flex:1}
+.toggle{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:transparent;padding:6px 12px;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+input[type=range]{accent-color:var(--accent);width:90px}
+
+/* svg classes */
+.mv{transition:transform var(--dur) cubic-bezier(.45,.05,.2,1),opacity var(--dur) ease}
+@media (prefers-reduced-motion: reduce){.mv{transition:none}}
+.nt-A{fill:var(--A-t);stroke:var(--A)} .nt-U{fill:var(--U-t);stroke:var(--U)} .nt-G{fill:var(--G-t);stroke:var(--G)} .nt-C{fill:var(--C-t);stroke:var(--C)} .nt-T{fill:var(--U-t);stroke:var(--U)}
+.tx-A{fill:var(--A)} .tx-U,.tx-T{fill:var(--U)} .tx-G{fill:var(--G)} .tx-C{fill:var(--C)}
+.ntxt{font-family:var(--f-mono);font-size:12px;font-weight:600;text-anchor:middle}
+.lbl{font-family:var(--f-body);font-size:11px;fill:var(--muted);font-weight:600}
+.lblb{font-family:var(--f-mono);font-size:12px;fill:var(--ink);font-weight:600}
+
+/* side panel */
+.side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.card h2{font-size:13px;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:700}
+.phase-name{font-family:var(--f-display);font-size:22px;margin:0 0 6px;line-height:1.3}
+.desc{margin:0}
+.desc code{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+table.sites{width:100%;border-collapse:collapse;font-size:13px}
+table.sites th,table.sites td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.sites th{color:var(--muted);font-weight:600;font-size:12px}
+table.sites td:first-child{font-weight:700;width:34px}
+.chain{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.chip{display:inline-flex;align-items:center;justify-content:center;font-family:var(--f-mono);font-size:12px;font-weight:600;color:#fff;border-radius:999px;padding:2px 9px}
+.dash{color:var(--muted)}
+.quiz{border-color:var(--accent)}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.choices button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 10px}
+.choices .ac{font-family:var(--f-mono);font-size:14px}
+.choices .aa{font-size:12px;color:var(--muted);font-weight:500}
+.choices button.wrong{border-color:var(--bad);animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.fb{margin:10px 0 0;font-size:13px}
+.fb.ok{color:var(--good)} .fb.no{color:var(--bad)}
+.score{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.log{list-style:none;margin:0;padding:0;font-size:13px;max-height:170px;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.log li{color:var(--muted)} .log li:last-child{color:var(--ink);font-weight:600}
+
+/* lower */
+.lower{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.lower{grid-template-columns:minmax(0,1fr)}}
+.tablewrap{overflow-x:auto}
+table.codons{border-collapse:collapse;font-size:12px;width:100%;min-width:520px}
+table.codons th{background:var(--surface-2);font-family:var(--f-mono);font-size:13px;padding:6px;border:1px solid var(--line)}
+table.codons td{border:1px solid var(--line);padding:4px 6px;vertical-align:top}
+table.codons td div{display:flex;justify-content:space-between;gap:6px;padding:1px 4px;border-radius:4px}
+table.codons td div span:first-child{font-family:var(--f-mono);font-weight:600}
+table.codons td div.stop span:last-child{color:var(--bad);font-weight:700}
+table.codons td div.start span:last-child{color:var(--good);font-weight:700}
+table.codons td div.on{background:var(--hl);outline:1px solid var(--G)}
+.q{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.q:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.q p{margin:0 0 8px;font-weight:600}
+.opts{display:flex;flex-wrap:wrap;gap:6px}
+.opts button{font-weight:500;font-size:13px;padding:6px 10px}
+.opts button.right{border-color:var(--good);color:var(--good);font-weight:700}
+.opts button.wrong{border-color:var(--bad);color:var(--bad)}
+.qfb{font-size:13px;color:var(--muted);margin:6px 0 0}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.kbd{font-size:12px;color:var(--muted)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:10px 14px;font-size:15px;color:var(--muted)}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs button:hover{color:var(--ink)}
+#ovStage svg{width:100%;min-width:700px;height:auto;display:block}
+ol.steplist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+ol.steplist button{width:100%;text-align:left;font-weight:500;padding:6px 10px;font-size:13px;background:transparent}
+ol.steplist button.cur{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.ordlist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.ordlist button{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;font-weight:500;font-size:13px;line-height:1.45}
+.ordlist .num{flex:none;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.ordlist button.done{border-color:var(--accent);cursor:default}
+.ordlist button.done .num{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.ordlist button.wrong{border-color:var(--bad);animation:shake .35s}
+.small{font-size:13px;color:var(--muted)}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">생명과학 · 유전자의 발현 · 번역</div>
+    <h1>단백질 합성 시뮬레이터</h1>
+    <p>‘전체 과정’에서는 핵 속 전사부터 mRNA 이동, tRNA와 아미노산의 결합, 번역, 폴리솜까지 큰 흐름을 보고, ‘번역 상세’에서는 리보솜의 E·P·A 자리에서 일어나는 개시·신장·종결을 한 단계씩 따라갑니다. 입력한 서열이 두 화면에 함께 쓰입니다.</p>
+  </header>
+
+  <form class="inputbar" id="seqForm">
+    <div class="field">
+      <label for="preset">예시 서열</label>
+      <select id="preset">
+        <option value="0">기본 예시 (Met–Phe–Gly–Ser–Lys–His)</option>
+        <option value="1">짧은 서열 (Met–Ala–Trp)</option>
+        <option value="2">DNA 주형 가닥으로 시작</option>
+        <option value="3">직접 입력</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="seqType">입력 종류</label>
+      <select id="seqType">
+        <option value="mrna">mRNA (5'→3')</option>
+        <option value="dna">DNA 주형 가닥 (3'→5')</option>
+      </select>
+    </div>
+    <div class="field grow">
+      <label for="seqIn">서열</label>
+      <input type="text" id="seqIn" autocomplete="off" spellcheck="false" maxlength="120">
+    </div>
+    <button type="submit" class="primary">서열 적용</button>
+    <button type="button" id="randBtn">무작위 서열</button>
+    <p class="err" id="err" hidden></p>
+  </form>
+
+  <nav class="tabs" role="tablist" aria-label="화면 선택">
+    <button type="button" role="tab" id="tabBtnOv" aria-selected="true">① 전체 과정 · 전사에서 단백질까지</button>
+    <button type="button" role="tab" id="tabBtnDt" aria-selected="false">② 번역 상세 · 리보솜의 개시·신장·종결</button>
+  </nav>
+
+  <div class="main" id="tabOv">
+    <section class="stagecard" aria-label="유전자 발현 전 과정">
+      <div class="stagehead">
+        <div class="seg" role="group" aria-label="세포 종류">
+          <button type="button" id="kEuk" aria-pressed="true">진핵생물</button>
+          <button type="button" id="kPro" aria-pressed="false">원핵생물</button>
+        </div>
+        <div class="progress" id="ovProg"></div>
+      </div>
+      <div class="stage" id="ovStage"><svg id="ovSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" role="img" aria-label="유전자 발현 과정 그림"></svg></div>
+      <div class="controls">
+        <button type="button" id="ovReset">처음으로</button>
+        <button type="button" id="ovPrev">◀ 이전</button>
+        <button type="button" id="ovNext" class="primary">다음 단계 ▶</button>
+        <button type="button" id="ovReplay">다시 재생</button>
+        <button type="button" id="ovAuto">자동 재생</button>
+        <span class="sp"></span>
+        <button type="button" id="ovToDetail" hidden>번역 상세로 이동 →</button>
+      </div>
+    </section>
+    <aside class="side">
+      <div class="card">
+        <h2>현재 단계</h2>
+        <p class="phase-name" id="ovName"></p>
+        <p class="desc" id="ovDesc"></p>
+      </div>
+      <div class="card">
+        <h2>단계 목록</h2>
+        <ol class="steplist" id="ovSteps"></ol>
+      </div>
+      <div class="card">
+        <h2>순서 맞히기</h2>
+        <p class="small" style="margin:0">진핵세포의 단백질 합성 과정을 일어나는 순서대로 누르세요.</p>
+        <div class="ordlist" id="ordList"></div>
+        <p class="fb" id="ordFb"></p>
+        <button type="button" id="ordReset">다시 섞기</button>
+      </div>
+    </aside>
+  </div>
+
+  <div class="main" id="tabDt" hidden>
+    <section class="stagecard" aria-label="번역 시뮬레이션">
+      <div class="stagehead">
+        <div class="tracker" id="tracker"><span>준비</span><span>개시</span><span>신장</span><span>종결</span></div>
+        <div class="progress" id="progress"></div>
+      </div>
+      <div class="stage" id="stage"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div class="controls">
+        <button type="button" id="resetBtn">처음으로</button>
+        <button type="button" id="prevBtn">◀ 이전</button>
+        <button type="button" id="nextBtn" class="primary">다음 단계 ▶</button>
+        <button type="button" id="playBtn">자동 재생</button>
+        <span class="sp"></span>
+        <label class="toggle" for="speed">속도 <input type="range" id="speed" min="0.5" max="2" step="0.25" value="1"></label>
+        <label class="toggle" for="showDNA"><input type="checkbox" id="showDNA" checked> 주형 DNA</label>
+        <div class="seg" role="group" aria-label="모드">
+          <button type="button" id="modeView" aria-pressed="true">보기</button>
+          <button type="button" id="modeQuiz" aria-pressed="false">직접 해보기</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card">
+        <h2 id="stageLabel">현재 단계</h2>
+        <p class="phase-name" id="phaseName"></p>
+        <p class="desc" id="desc"></p>
+      </div>
+      <div class="card quiz" id="quizCard" hidden>
+        <h2>A 자리에 무엇이 결합할까요?</h2>
+        <div class="desc" id="quizQ"></div>
+        <div class="choices" id="choices"></div>
+        <p class="fb" id="fb"></p>
+        <div class="score" id="score"></div>
+      </div>
+      <div class="card">
+        <h2>리보솜 자리</h2>
+        <table class="sites"><thead><tr><th>자리</th><th>코돈</th><th>tRNA 안티코돈</th><th>운반 중</th></tr></thead><tbody id="sites"></tbody></table>
+      </div>
+      <div class="card">
+        <h2>폴리펩타이드</h2>
+        <div class="chain" id="chain"></div>
+      </div>
+      <div class="card">
+        <h2>기록</h2>
+        <ul class="log" id="log"></ul>
+        <p class="kbd">키보드: → 다음 · ← 이전 · Space 자동 재생</p>
+      </div>
+    </aside>
+  </div>
+
+  <div class="lower">
+    <section class="card">
+      <h2>유전부호표 (mRNA 코돈)</h2>
+      <div class="tablewrap"><table class="codons" id="codonTable"></table></div>
+      <div class="legend">
+        <span><i style="background:var(--A)"></i>A 아데닌</span>
+        <span><i style="background:var(--U)"></i>U 유라실 (DNA는 T)</span>
+        <span><i style="background:var(--G)"></i>G 구아닌</span>
+        <span><i style="background:var(--C)"></i>C 사이토신</span>
+        <span>노란 칸: 지금 A 자리에 있는 코돈</span>
+      </div>
+    </section>
+    <section class="card" id="concept">
+      <h2>개념 확인</h2>
+    </section>
+  </div>
+</div>
+
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+const BASES='UCAG';
+const AA1='FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG';
+const CODON={};{let i=0;for(const a of BASES)for(const b of BASES)for(const c of BASES)CODON[a+b+c]=AA1[i++];}
+const AA={F:['Phe','페닐알라닌'],L:['Leu','류신'],S:['Ser','세린'],Y:['Tyr','타이로신'],C:['Cys','시스테인'],W:['Trp','트립토판'],P:['Pro','프롤린'],H:['His','히스티딘'],Q:['Gln','글루타민'],R:['Arg','아르지닌'],I:['Ile','아이소류신'],M:['Met','메싸이오닌'],T:['Thr','트레오닌'],N:['Asn','아스파라진'],K:['Lys','라이신'],V:['Val','발린'],A:['Ala','알라닌'],D:['Asp','아스파르트산'],E:['Glu','글루탐산'],G:['Gly','글라이신'],'*':['종결','종결']};
+const AACOL={M:'#B4572E',F:'#7A5BB5',L:'#3F7FB8',S:'#2E8B6E',Y:'#A2477E',C:'#8C7A1E',W:'#5A4A9C',P:'#B5486A',H:'#2F7D9B',Q:'#6A8A2B',R:'#C2552F',I:'#3A63A8',T:'#2C8C86',N:'#7E6B2C',K:'#B24A4A',V:'#4E77A8',A:'#5B8C3A',D:'#A64A8E',E:'#8A4FB0',G:'#3D8F5E'};
+const PAIR={A:'U',U:'A',G:'C',C:'G'};
+const TPL={A:'T',U:'A',G:'C',C:'G'};
+const STOPS=['UAA','UAG','UGA'];
+const PRESETS=[
+  {type:'mrna',seq:'GCCAUGUUCGGAUCUAAACAUUGACG'},
+  {type:'mrna',seq:'AUGGCAUGGUAA'},
+  {type:'dna',seq:'TACAAGCCTAGAATT'},
+];
+const NW=18, CW=NW*3, X0=48, MY=262, H=380;
+const pairOf=s=>[...s].map(b=>PAIR[b]).join('');
+const aaName=c=>{const a=CODON[c];return a==='*'?'종결':AA[a][0]+'('+AA[a][1]+')';};
+const $=id=>document.getElementById(id);
+
+let P=null;          // parsed sequence
+let S=null;          // current state
+let hist=[];
+let mode='view';
+let score={ok:0,tries:0};
+let timer=null;
+
+/* ---------- parse ---------- */
+function parse(raw,type){
+  let s=raw.toUpperCase().replace(/5'|3'|5′|3′/g,'').replace(/[^A-Z]/g,'');
+  if(!s) return {error:'서열을 입력하세요.'};
+  let mrna;
+  if(type==='dna'){
+    if(/[^ATGC]/.test(s)) return {error:'DNA 서열에는 A, T, G, C만 쓸 수 있습니다.'};
+    mrna=[...s].map(b=>({A:'U',T:'A',G:'C',C:'G'})[b]).join('');
+  }else{
+    s=s.replace(/T/g,'U');
+    if(/[^AUGC]/.test(s)) return {error:'mRNA 서열에는 A, U, G, C만 쓸 수 있습니다.'};
+    mrna=s;
+  }
+  if(mrna.length>90) return {error:'서열은 90염기 이하로 입력하세요.'};
+  const start=mrna.indexOf('AUG');
+  if(start<0) return {error:'개시 코돈 AUG가 없습니다. 번역은 AUG에서 시작합니다.'};
+  const codons=[];
+  for(let i=start;i+3<=mrna.length;i+=3){const c=mrna.slice(i,i+3);codons.push(c);if(STOPS.includes(c))break;}
+  if(!STOPS.includes(codons[codons.length-1])) return {error:'AUG부터 읽은 읽기틀 안에 종결 코돈(UAA, UAG, UGA)이 없습니다.'};
+  if(codons.length<2) return {error:'서열이 너무 짧습니다.'};
+  return {seq:mrna,start,codons};
+}
+
+/* ---------- state machine ---------- */
+function fresh(){return {phase:'ready',p:-1,trnas:{},chain:[],holder:null,rf:false,released:false,log:['mRNA가 세포질로 나왔습니다.'],choices:null};}
+const clone=o=>JSON.parse(JSON.stringify(o));
+function canNext(s){return s.phase!=='end';}
+function nextState(s){
+  const n=clone(s); n.choices=null;
+  const cd=P.codons;
+  switch(s.phase){
+    case 'ready':
+      n.phase='sub';n.p=0;n.trnas[0]={st:'in'};n.chain=[0];n.holder=0;
+      n.log.push('소단위체 + 개시 tRNA(Met) 결합 — 개시 코돈 AUG');break;
+    case 'sub':
+      n.phase='large';n.log.push('대단위체 결합 — 개시 tRNA는 P 자리');break;
+    case 'large': case 'move': {
+      const a=n.p+1;
+      for(const k in n.trnas){if(+k===n.p-1&&n.trnas[k].st==='in')n.trnas[k].st='out';}
+      if(STOPS.includes(cd[a])){n.phase='release';n.rf=true;n.log.push('종결 코돈 '+cd[a]+' — 방출 인자 결합');}
+      else{n.phase='arrive';n.trnas[a]={st:'in'};n.log.push('A 자리: tRNA 3\'-'+pairOf(cd[a])+'-5\' 가 '+AA[CODON[cd[a]]][0]+' 운반');}
+      break;}
+    case 'arrive':
+      n.phase='bond';n.chain.push(n.p+1);n.holder=n.p+1;
+      n.log.push('펩타이드 결합: '+n.chain.map(k=>AA[CODON[cd[k]]][0]).join('–'));break;
+    case 'bond':
+      n.phase='move';n.p+=1;n.log.push('리보솜 이동 (5\'→3\', 코돈 1개)');break;
+    case 'release':
+      n.phase='end';n.rf=false;n.released=true;
+      for(const k in n.trnas)n.trnas[k].st='out';
+      n.log.push('폴리펩타이드 방출, 리보솜 분리 — 번역 종결');break;
+  }
+  if(n.phase==='large'||n.phase==='move') n.choices=makeChoices(cd[n.p+1]);
+  return n;
+}
+function makeChoices(codon){
+  const isStop=STOPS.includes(codon);
+  const list=[]; const seen=new Set();
+  const add=ac=>{const c=pairOf(ac);if(seen.has(ac)||STOPS.includes(c))return false;seen.add(ac);list.push({kind:'trna',ac,aa:CODON[c]});return true;};
+  const rnd=()=>{let c;do{c=[0,0,0].map(()=>BASES[Math.random()*4|0]).join('');}while(STOPS.includes(c));return pairOf(c);};
+  if(!isStop){
+    const right=pairOf(codon); add(right);
+    const cand=[codon,[...right].reverse().join('')];
+    for(const c of cand){if(list.length<3)add(c);}
+    while(list.length<3)add(rnd());
+  }else{ while(list.length<3)add(rnd()); }
+  list.push({kind:'rf'});
+  for(let i=list.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[list[i],list[j]]=[list[j],list[i]];}
+  return list;
+}
+
+/* ---------- svg helpers ---------- */
+function el(tag,attrs,parent,text){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(text!=null)e.textContent=text;if(parent)parent.appendChild(e);return e;}
+const svg=$('svg');
+let L={}; const anim=new Map();
+function cx(k){return X0+(P.start+3*k)*NW+CW/2;}
+function setT(g,t){g.style.transform=`translate(${t.x}px,${t.y}px)`;g.style.opacity=t.o==null?1:t.o;}
+function upsert(id,layer,build,target,initial){
+  let g=anim.get(id);
+  if(!g){g=el('g',{class:'mv'},layer);build(g);anim.set(id,g);g.style.transition='none';setT(g,initial||target);g.getBoundingClientRect();g.style.transition='';}
+  setT(g,target);return g;
+}
+
+function buildSVG(){
+  svg.innerHTML='';anim.clear();
+  const W=Math.max(680,X0*2+P.seq.length*NW+40);
+  svg.setAttribute('width',W);svg.setAttribute('height',H);svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  L.ribo=el('g',{},svg);L.mrna=el('g',{},svg);L.trna=el('g',{},svg);L.bead=el('g',{},svg);
+  // large subunit
+  upsert('large',L.ribo,g=>{
+    el('path',{d:`M-108,${MY-12} C-128,${MY-70} -122,${MY-118} -90,${MY-134} C-52,${MY-152} 52,${MY-152} 90,${MY-134} C122,${MY-118} 128,${MY-70} 108,${MY-12} Z`,fill:'var(--ribo)',stroke:'var(--ribo-edge)','stroke-width':1.5},g);
+    for(let i=-1;i<=1;i++)el('rect',{x:i*CW-24,y:MY-128,width:48,height:116,rx:22,fill:'var(--ribo-2)',opacity:.55},g);
+    el('text',{x:96,y:MY-138,class:'lbl','text-anchor':'start'},g,'대단위체');
+  },{x:0,y:-40,o:0});
+  upsert('small',L.ribo,g=>{
+    el('path',{d:`M-112,${MY+28} C-116,${MY+72} -64,${MY+84} 0,${MY+84} C64,${MY+84} 116,${MY+72} 112,${MY+28} Z`,fill:'var(--ribo)',stroke:'var(--ribo-edge)','stroke-width':1.5},g);
+    ['E','P','A'].forEach((t,i)=>el('text',{x:(i-1)*CW,y:MY+60,'text-anchor':'middle',class:'lblb'},g,t+' 자리'));
+    el('text',{x:118,y:MY+80,class:'lbl'},g,'소단위체');
+  },{x:0,y:40,o:0});
+}
+
+function trnaBuild(k,init){return g=>{
+  const col=init?'var(--trna-init)':'var(--trna)';
+  el('path',{d:'M0,-82 L0,-96 L8,-100',fill:'none',stroke:col,'stroke-width':3,'stroke-linecap':'round'},g);
+  el('circle',{cx:-18,cy:-58,r:8,fill:col,opacity:.85},g);
+  el('circle',{cx:18,cy:-58,r:8,fill:col,opacity:.85},g);
+  el('rect',{x:-12,y:-86,width:24,height:66,rx:9,fill:col},g);
+  el('rect',{x:-27,y:-22,width:54,height:20,rx:4,fill:'var(--surface)',stroke:col,'stroke-width':2},g);
+  const ac=pairOf(P.codons[k]);
+  [...ac].forEach((b,i)=>el('text',{x:(i-1)*NW,y:-8,class:'ntxt tx-'+b},g,b));
+};}
+function beadBuild(k){return g=>{
+  const a=CODON[P.codons[k]];
+  el('circle',{r:11,fill:AACOL[a]},g);
+  el('text',{y:3,'text-anchor':'middle','font-size':7.5,'font-weight':700,fill:'#fff','font-family':'IBM Plex Mono, monospace'},g,AA[a][0]);
+};}
+function rfBuild(g){
+  el('rect',{x:-22,y:-104,width:44,height:102,rx:14,fill:'var(--rf)'},g);
+  el('text',{x:0,y:-60,'text-anchor':'middle','font-size':11,'font-weight':700,fill:'#fff'},g,'방출');
+  el('text',{x:0,y:-46,'text-anchor':'middle','font-size':11,'font-weight':700,fill:'#fff'},g,'인자');
+}
+function chainPts(ax,ay,n){
+  const pts=[[ax,ay]];let x=ax,y=ay;
+  for(let i=1;i<n;i++){let dx,dy;if(i<=3){dx=-11;dy=-18;}else{dx=-21;dy=i%2?-7:7;}if(x+dx<20){dx=0;dy=-21;}x+=dx;y+=dy;pts.push([x,y]);}
+  return pts;
+}
+
+/* ---------- render ---------- */
+function render(){
+  const s=S, cd=P.codons;
+  // mRNA layer (static redraw)
+  L.mrna.innerHTML='';
+  const len=P.seq.length, W=+svg.getAttribute('width');
+  el('line',{x1:X0-8,y1:MY+24,x2:X0+len*NW+8,y2:MY+24,stroke:'var(--mrna)','stroke-width':4,'stroke-linecap':'round'},L.mrna);
+  el('text',{x:X0-14,y:MY+16,class:'lblb','text-anchor':'end'},L.mrna,"5'");
+  el('text',{x:X0+len*NW+14,y:MY+16,class:'lblb'},L.mrna,"3'");
+  el('text',{x:X0-14,y:MY+42,class:'lbl','text-anchor':'end'},L.mrna,'mRNA');
+  const active=new Set();
+  if(s.p>=0&&!s.released){[s.p-1,s.p,s.p+1].forEach(k=>{if(k>=0&&k<cd.length)active.add(k);});}
+  cd.forEach((c,k)=>{
+    const x=X0+(P.start+3*k)*NW;
+    el('rect',{x:x-1,y:MY-3,width:CW+2,height:28,rx:5,fill:active.has(k)?'var(--hl)':'none',stroke:'var(--line)','stroke-width':1},L.mrna);
+  });
+  [...P.seq].forEach((b,i)=>{
+    const x=X0+i*NW;
+    el('rect',{x:x+1.5,y:MY,width:NW-3,height:22,rx:3,class:'nt-'+b,'stroke-width':1},L.mrna);
+    el('text',{x:x+NW/2,y:MY+15,class:'ntxt tx-'+b},L.mrna,b);
+  });
+  el('text',{x:cx(0),y:MY-8+ (s.p===-1?0:400),'text-anchor':'middle',class:'lbl'},L.mrna,'개시 코돈');
+  if(!(s.p>=cd.length-3&&!s.released)) el('text',{x:cx(cd.length-1),y:MY-8,'text-anchor':'middle',class:'lbl',fill:'var(--bad)'},L.mrna,'종결 코돈');
+  if($('showDNA').checked){
+    const y=MY+110;
+    el('text',{x:X0-14,y:y+15,class:'lblb','text-anchor':'end'},L.mrna,"3'");
+    el('text',{x:X0+len*NW+14,y:y+15,class:'lblb'},L.mrna,"5'");
+    el('text',{x:X0,y:y-6,class:'lbl'},L.mrna,'주형 DNA 가닥 (전사의 틀, 핵 속에 있음)');
+    [...P.seq].forEach((b,i)=>{const t=TPL[b];const x=X0+i*NW;
+      el('rect',{x:x+1.5,y,width:NW-3,height:22,rx:3,class:'nt-'+t,'stroke-width':1,opacity:.75},L.mrna);
+      el('text',{x:x+NW/2,y:y+15,class:'ntxt tx-'+t},L.mrna,t);});
+  }
+  svg.setAttribute('height',$('showDNA').checked?MY+144:MY+100);
+
+  // ribosome
+  const rx=s.p>=0?cx(s.p):cx(0)-90;
+  const small=anim.get('small'),large=anim.get('large');
+  if(s.phase==='ready'){setT(small,{x:rx,y:40,o:0});setT(large,{x:rx,y:-60,o:0});}
+  else if(s.phase==='sub'){setT(small,{x:rx,y:0});setT(large,{x:rx,y:-60,o:0});}
+  else if(s.released){setT(small,{x:rx+30,y:36,o:.35});setT(large,{x:rx+30,y:-34,o:.35});}
+  else{setT(small,{x:rx,y:0});setT(large,{x:rx,y:0});}
+
+  // tRNAs
+  const pos=k=>({x:cx(k),y:MY-2});
+  const keep=new Set(['small','large']);
+  for(const k in s.trnas){
+    const kk=+k,t=s.trnas[k],p=pos(kk);
+    const id='t'+k;keep.add(id);
+    const target=t.st==='in'?{x:p.x,y:p.y}:{x:p.x-90,y:p.y-170,o:0};
+    upsert(id,L.trna,trnaBuild(kk,kk===0),target,{x:p.x+100,y:p.y-170,o:0});
+  }
+  if(s.rf){keep.add('rf');const p=pos(s.p+1);upsert('rf',L.trna,rfBuild,{x:p.x,y:p.y},{x:p.x+100,y:p.y-170,o:0});}
+  else if(anim.get('rf')){const g=anim.get('rf');keep.add('rf');const tr=g.style.transform;setT(g,{x:cx(s.p+1)+60,y:MY-170,o:0});}
+  // beads
+  const AO={x:8,y:-112};
+  const hp=s.holder!=null?pos(s.holder):null;
+  const pts=hp?(s.released?chainPts(hp.x+40,hp.y+AO.y-70,s.chain.length):chainPts(hp.x+AO.x,hp.y+AO.y,s.chain.length)):[];
+  for(const k in s.trnas){
+    const kk=+k,id='b'+k;keep.add(id);
+    const p=pos(kk);const t=s.trnas[k];
+    let target;
+    const ci=s.chain.indexOf(kk);
+    if(ci>=0){const pt=pts[s.chain.length-1-ci];target={x:pt[0],y:pt[1]};}
+    else{target=t.st==='in'?{x:p.x+AO.x,y:p.y+AO.y}:{x:p.x-90+AO.x,y:p.y-170+AO.y,o:0};}
+    upsert(id,L.bead,beadBuild(kk),target,{x:p.x+100+AO.x,y:p.y-170+AO.y,o:0});
+  }
+  for(const [id,g] of anim){if(!keep.has(id)){g.remove();anim.delete(id);}}
+
+  renderPanel();
+  // autoscroll
+  const st=$('stage');const target=Math.max(0,rx-st.clientWidth/2);
+  st.scrollTo({left:target,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+}
+
+const PHASES={
+  ready:{stage:0,name:'준비 — mRNA가 세포질로'},
+  sub:{stage:1,name:'개시 ① 소단위체와 개시 tRNA'},
+  large:{stage:1,name:'개시 ② 대단위체 결합'},
+  arrive:{stage:2,name:'신장 ① tRNA가 A 자리로'},
+  bond:{stage:2,name:'신장 ② 펩타이드 결합'},
+  move:{stage:2,name:'신장 ③ 리보솜 이동'},
+  release:{stage:3,name:'종결 ① 종결 코돈 도달'},
+  end:{stage:3,name:'종결 ② 분리'},
+};
+function descOf(s){
+  const cd=P.codons,c=k=>'<code>'+cd[k]+'</code>';
+  switch(s.phase){
+    case 'ready':return `핵에서 전사된 mRNA가 핵공을 통해 세포질로 나왔습니다. 번역은 5' 쪽에서 처음 나오는 개시 코돈 ${c(0)}에서 시작합니다. 개시 코돈 앞쪽 ${P.start}개 염기는 번역되지 않습니다.`;
+    case 'sub':return `mRNA가 리보솜 소단위체에 결합하고, 메싸이오닌(Met)을 운반하는 개시 tRNA가 개시 코돈 ${c(0)}에 결합합니다. 개시 tRNA의 안티코돈은 <code>3'-UAC-5'</code>입니다.`;
+    case 'large':return `리보솜 대단위체가 결합해 완전한 리보솜이 만들어집니다. 개시 tRNA는 <b>P 자리</b>에 있고, 비어 있는 <b>A 자리</b>에는 다음 코돈 ${c(s.p+1)}가 놓여 있습니다.`;
+    case 'arrive':{const k=s.p+1;return `A 자리의 코돈 ${c(k)}에 상보적인 안티코돈 <code>3'-${pairOf(cd[k])}-5'</code>을 가진 tRNA가 ${aaName(cd[k])}을(를) 운반해 들어옵니다.`+(s.p>0?' E 자리에 있던 빈 tRNA는 리보솜에서 떨어져 나갑니다.':'');}
+    case 'bond':return `P 자리 tRNA에 붙어 있던 ${s.chain.length>2?'폴리펩타이드':'아미노산'}가 A 자리 tRNA의 ${aaName(cd[s.p+1])}과(와) 펩타이드 결합합니다. 이 결합은 리보솜에 있는 효소가 촉매합니다. 이제 P 자리 tRNA는 비어 있습니다.`;
+    case 'move':return `리보솜이 mRNA를 따라 5'→3' 방향으로 코돈 하나만큼 이동합니다. A 자리의 tRNA는 P 자리로, P 자리의 빈 tRNA는 E 자리로 옮겨 갑니다. 새로 빈 A 자리에는 코돈 ${c(s.p+1)}가 놓입니다.`;
+    case 'release':return `A 자리에 종결 코돈 ${c(s.p+1)}가 왔습니다. 종결 코돈과 결합하는 tRNA가 없어서 tRNA 대신 <b>방출 인자</b>가 A 자리에 결합합니다.`;
+    case 'end':return `폴리펩타이드가 tRNA에서 떨어져 나오고 mRNA, 리보솜 소단위체와 대단위체, tRNA가 모두 분리됩니다. 아미노산 ${s.chain.length}개로 된 폴리펩타이드는 접히고 구부러져 고유한 입체 구조를 가진 단백질이 됩니다.`;
+  }
+}
+function renderPanel(){
+  const s=S,cd=P.codons,ph=PHASES[s.phase];
+  $('phaseName').textContent=ph.name;
+  $('desc').innerHTML=descOf(s);
+  [...$('tracker').children].forEach((sp,i)=>{sp.className=i===ph.stage?'on':(i<ph.stage?'done':'');});
+  const n=cd.length-1,total=2+3*(n-1)+2;
+  $('progress').textContent=`단계 ${hist.length} / ${total}`;
+  // sites
+  const rows=[];
+  ['E','P','A'].forEach((nm,i)=>{
+    const k=s.p+i-1;let codon='—',ac='—',held='—';
+    if(s.p>=0&&!s.released&&k>=0&&k<cd.length&&(s.phase!=='sub'||nm==='P')){
+      codon='<code>'+cd[k]+'</code>';
+      const t=s.trnas[k];
+      if(t&&t.st==='in'){ac="<code>3'-"+pairOf(cd[k])+"-5'</code>";
+        const ci=s.chain.indexOf(k);
+        if(ci<0)held=AA[CODON[cd[k]]][0];else if(s.holder===k)held=s.chain.length>1?`폴리펩타이드 (${s.chain.length})`:AA[CODON[cd[k]]][0];else held='비어 있음';}
+      if(nm==='A'&&s.rf){ac='방출 인자';held='—';}
+    }
+    rows.push(`<tr><td>${nm}</td><td>${codon}</td><td>${ac}</td><td>${held}</td></tr>`);
+  });
+  $('sites').innerHTML=rows.join('');
+  // chain
+  $('chain').innerHTML=s.chain.length?s.chain.map(k=>{const a=CODON[cd[k]];return `<span class="chip" style="background:${AACOL[a]}" title="${AA[a][1]}">${AA[a][0]}</span>`;}).join('<span class="dash">–</span>')+(s.released?' <span class="dash">완성</span>':''):'<span class="dash">아직 없음</span>';
+  // log
+  $('log').innerHTML=s.log.map(t=>`<li>${t}</li>`).join('');
+  $('log').scrollTop=1e6;
+  // buttons
+  $('prevBtn').disabled=hist.length===0;
+  const needPick=mode==='quiz'&&s.choices;
+  $('nextBtn').disabled=!canNext(s)||needPick;
+  $('nextBtn').textContent=needPick?'tRNA를 고르세요':'다음 단계 ▶';
+  // quiz
+  const qc=$('quizCard');
+  if(needPick){
+    qc.hidden=false;const k=s.p+1;
+    $('quizQ').innerHTML=`A 자리 코돈은 <code>5'-${cd[k]}-3'</code>입니다. 이 코돈과 결합할 것을 고르세요.`;
+    $('choices').innerHTML='';
+    s.choices.forEach(ch=>{
+      const b=document.createElement('button');b.type='button';
+      b.innerHTML=ch.kind==='rf'?'<span class="ac">방출 인자</span><span class="aa">tRNA가 아닌 단백질</span>':`<span class="ac">3'-${ch.ac}-5'</span><span class="aa">${AA[ch.aa][0]} 운반</span>`;
+      b.addEventListener('click',()=>pick(ch,b));
+      $('choices').appendChild(b);
+    });
+  }else qc.hidden=true;
+  $('score').textContent=score.tries?`정답 ${score.ok} / 시도 ${score.tries}`:'';
+  renderCodonTable();
+}
+function pick(ch,btn){
+  const cd=P.codons,codon=cd[S.p+1],isStop=STOPS.includes(codon);
+  score.tries++;
+  let ok=false,msg='';
+  if(isStop){
+    if(ch.kind==='rf'){ok=true;msg=`정답! ${codon}은(는) 종결 코돈이라 맞는 tRNA가 없고 방출 인자가 결합합니다.`;}
+    else msg=`${codon}은(는) 종결 코돈입니다. 종결 코돈과 결합하는 안티코돈을 가진 tRNA는 없습니다.`;
+  }else{
+    if(ch.kind==='rf')msg='방출 인자는 종결 코돈(UAA, UAG, UGA)에만 결합합니다.';
+    else if(ch.ac===pairOf(codon)){ok=true;msg=`정답! 안티코돈 3'-${ch.ac}-5'은 코돈 5'-${codon}-3'과 상보적으로 결합합니다.`;}
+    else{
+      const pc=pairOf(ch.ac);
+      let hint='';
+      if(ch.ac===codon)hint=' 코돈과 같은 서열이 아니라 상보적인 서열이어야 합니다.';
+      else if(ch.ac===[...pairOf(codon)].reverse().join(''))hint=' 방향을 확인하세요. 안티코돈은 3\'→5\' 방향으로 코돈과 마주 봅니다.';
+      msg=`이 tRNA는 코돈 5'-${pc}-3'과 짝을 이룹니다.${hint}`;
+    }
+  }
+  if(ok){score.ok++;stopPlay();go();setFb(msg,true);}
+  else{btn.classList.remove('wrong');void btn.offsetWidth;btn.classList.add('wrong');setFb(msg,false);$('score').textContent=`정답 ${score.ok} / 시도 ${score.tries}`;}
+}
+function setFb(t,ok){const f=$('fb');f.textContent=t;f.className='fb '+(ok?'ok':'no');}
+
+function renderCodonTable(){
+  const s=S;let on=null;
+  if(s.p>=0&&!s.released){const k=(s.phase==='sub'||s.phase==='large')&&mode==='view'?s.p+1:s.p+1;on=P.codons[k];}
+  if(s.phase==='sub')on=P.codons[0];
+  let h='<thead><tr><th>1번째＼2번째</th>'+[...BASES].map(b=>`<th>${b}</th>`).join('')+'</tr></thead><tbody>';
+  for(const a of BASES){h+=`<tr><th>${a}</th>`;for(const b of BASES){h+='<td>';for(const c of BASES){const cod=a+b+c,x=CODON[cod];const cls=(x==='*'?'stop':cod==='AUG'?'start':'')+(cod===on?' on':'');h+=`<div class="${cls}"><span>${cod}</span><span>${x==='*'?'종결':AA[x][0]+(cod==='AUG'?' 개시':'')}</span></div>`;}h+='</td>';}h+='</tr>';}
+  $('codonTable').innerHTML=h+'</tbody>';
+}
+
+/* ---------- controls ---------- */
+function go(){if(!canNext(S))return;if(mode==='quiz'&&S.choices&&!go.force){}hist.push(S);S=nextState(S);$('fb').textContent='';render();}
+function next(){if(mode==='quiz'&&S.choices)return false;if(!canNext(S))return false;hist.push(S);S=nextState(S);$('fb').textContent='';render();return true;}
+function prev(){if(!hist.length)return;stopPlay();S=hist.pop();render();}
+function reset(){stopPlay();hist=[];S=fresh();buildSVG();render();}
+function stopPlay(){if(timer){clearInterval(timer);timer=null;}$('playBtn').textContent='자동 재생';}
+function play(){
+  if(timer){stopPlay();return;}
+  if(!canNext(S))reset();
+  const sp=+$('speed').value;
+  timer=setInterval(()=>{if(!next())stopPlay();},1500/sp);
+  $('playBtn').textContent='일시 정지';
+}
+function load(raw,type){
+  const r=parse(raw,type);
+  if(r.error){$('err').textContent=r.error;$('err').hidden=false;return false;}
+  $('err').hidden=true;P=r;reset();if(typeof ovReload==='function'&&typeof ov!=='undefined')ovReload();return true;
+}
+$('seqForm').addEventListener('submit',e=>{e.preventDefault();load($('seqIn').value,$('seqType').value);});
+$('preset').addEventListener('change',()=>{const v=+$('preset').value;if(v<3){const p=PRESETS[v];$('seqType').value=p.type;$('seqIn').value=p.seq;load(p.seq,p.type);}else{$('seqIn').focus();}});
+$('randBtn').addEventListener('click',()=>{
+  const r=()=>BASES[Math.random()*4|0];let s='';const u=1+(Math.random()*4|0);
+  for(let i=0;i<u;i++){let b;do{b=r();}while((s+b).endsWith('AUG')||(s+b).endsWith('AU')&&i===u-1);s+=b;}
+  s+='AUG';const n=4+(Math.random()*4|0);
+  for(let i=0;i<n;i++){let c;do{c=r()+r()+r();}while(STOPS.includes(c));s+=c;}
+  s+=STOPS[Math.random()*3|0]+r()+r();
+  const r2=parse(s,'mrna');if(r2.error||r2.start!==u){return $('randBtn').click();}
+  $('preset').value='3';$('seqType').value='mrna';$('seqIn').value=s;load(s,'mrna');
+});
+$('nextBtn').addEventListener('click',()=>{stopPlay();next();});
+$('prevBtn').addEventListener('click',prev);
+$('resetBtn').addEventListener('click',reset);
+$('playBtn').addEventListener('click',play);
+$('speed').addEventListener('input',()=>{const sp=+$('speed').value;document.documentElement.style.setProperty('--dur',Math.round(700/sp)+'ms');if(timer){stopPlay();play();}});
+$('showDNA').addEventListener('change',render);
+function setMode(m){mode=m;$('modeView').setAttribute('aria-pressed',m==='view');$('modeQuiz').setAttribute('aria-pressed',m==='quiz');$('fb').textContent='';render();}
+$('modeView').addEventListener('click',()=>setMode('view'));
+$('modeQuiz').addEventListener('click',()=>setMode('quiz'));
+document.addEventListener('keydown',e=>{
+  if(e.target.closest('input,select,textarea'))return;
+  if(!$('tabOv').hidden){
+    if(e.key==='ArrowRight'){e.preventDefault();ovStopAuto();ovGo(ov.i+1);}
+    else if(e.key==='ArrowLeft'){e.preventDefault();ovStopAuto();ovGo(ov.i-1);}
+    else if(e.key===' '){e.preventDefault();$('ovAuto').click();}
+    return;
+  }
+  if(e.key==='ArrowRight'){e.preventDefault();stopPlay();next();}
+  else if(e.key==='ArrowLeft'){e.preventDefault();prev();}
+  else if(e.key===' '){e.preventDefault();play();}
+});
+
+/* ---------- concept check ---------- */
+const QS=[
+  {q:'진핵세포에서 전사가 일어나는 장소는?',o:['핵','세포질','리보솜'],a:0,e:'전사는 핵에서, 번역은 세포질의 리보솜에서 일어납니다.'},
+  {q:'핵에서 만들어진 mRNA가 세포질로 나가는 통로는?',o:['핵공','세포막','소포체'],a:0,e:'mRNA는 핵공을 통해 세포질로 이동합니다.'},
+  {q:'아미노산은 tRNA의 어느 쪽에 결합할까요?',o:["3' 말단","5' 말단",'안티코돈 부위'],a:0,e:"효소의 작용으로 tRNA의 3' 말단에 아미노산이 결합합니다."},
+  {q:'원핵생물에서 전사와 번역이 동시에 일어날 수 있는 이유는?',o:['핵막이 없어 DNA와 리보솜이 같은 공간에 있어서','리보솜이 핵 속에 있어서','mRNA가 필요 없어서'],a:0,e:'원핵생물은 핵이 없어 전사 중인 mRNA에 바로 리보솜이 결합합니다.'},
+  {q:'폴리솜이 세포에 주는 이점은?',o:['짧은 시간에 많은 폴리펩타이드를 합성','더 긴 폴리펩타이드를 합성','mRNA를 더 빨리 분해'],a:0,e:'하나의 mRNA에 여러 리보솜이 결합해 동시에 번역합니다.'},
+  {q:'개시 tRNA가 대단위체 결합 후 위치하는 리보솜 자리는?',o:['E 자리','P 자리','A 자리'],a:1,e:'개시 tRNA는 P 자리에 있고, 다음 tRNA는 A 자리로 들어옵니다.'},
+  {q:'새로운 아미노산을 운반한 tRNA가 들어오는 자리는?',o:['E 자리','P 자리','A 자리'],a:2,e:'신장 단계마다 A 자리에 새 tRNA가 들어옵니다.'},
+  {q:'리보솜은 mRNA의 어느 방향으로 이동할까요?',o:["5' → 3'","3' → 5'"],a:0,e:"리보솜은 mRNA를 따라 5'→3' 방향으로 코돈 하나씩 이동합니다."},
+  {q:'개시 코돈 AUG와 결합하는 안티코돈 (3\'→5\')은?',o:['UAC','CAU','AUG','TAC'],a:0,e:"A-U, U-A, G-C로 짝을 지으면 3'-UAC-5'입니다. RNA에는 T가 없습니다."},
+  {q:'다음 중 종결 코돈이 아닌 것은?',o:['UAA','UAG','UGA','UGG'],a:3,e:'UGG는 트립토판(Trp)을 지정합니다. 종결 코돈은 UAA, UAG, UGA입니다.'},
+  {q:'종결 코돈에서 번역이 멈추는 이유는?',o:['리보솜이 mRNA 끝에 닿아서','종결 코돈과 결합하는 tRNA가 없어서','아미노산이 모두 떨어져서'],a:1,e:'종결 코돈에 대응하는 tRNA가 없고, 방출 인자가 결합해 폴리펩타이드가 떨어져 나옵니다.'},
+  {q:'펩타이드 결합은 어느 두 아미노산 사이에서 일어날까요?',o:['E 자리와 P 자리','P 자리와 A 자리','A 자리와 E 자리'],a:1,e:'P 자리 tRNA의 아미노산(폴리펩타이드)이 A 자리 tRNA의 아미노산과 결합합니다.'},
+];
+const cc=$('concept');
+QS.forEach((q,qi)=>{
+  const d=document.createElement('div');d.className='q';
+  d.innerHTML=`<p>${qi+1}. ${q.q}</p><div class="opts"></div><p class="qfb"></p>`;
+  q.o.forEach((o,oi)=>{const b=document.createElement('button');b.type='button';b.textContent=o;
+    b.addEventListener('click',()=>{
+      d.querySelectorAll('.opts button').forEach(x=>x.classList.remove('wrong'));
+      if(oi===q.a){b.classList.add('right');d.querySelector('.qfb').textContent='정답. '+q.e;}
+      else{b.classList.add('wrong');d.querySelector('.qfb').textContent='다시 생각해 보세요.';}
+    });
+    d.querySelector('.opts').appendChild(b);});
+  cc.appendChild(d);
+});
+
+/* ---------- overview: 전체 과정 ---------- */
+const EUK=[
+  {id:'dna',name:'DNA — 유전 정보의 저장',dur:0,desc:'진핵세포의 DNA는 핵 속에 있고, 단백질 합성 정보가 저장되어 있습니다. 유전자의 두 가닥 중 <b>주형 가닥</b>이 mRNA를 만드는 틀이 됩니다. 아래 확대 상자에 지금 입력한 서열의 주형 가닥이 보입니다.'},
+  {id:'tx',name:'❶ 전사',dur:4200,desc:'핵에서 RNA 중합 효소가 DNA 이중 나선을 풀며 이동하고, 주형 가닥에 상보적인 뉴클레오타이드를 연결해 mRNA를 만듭니다. DNA의 유전 정보가 mRNA로 전달됩니다. 짝: A→U, T→A, G→C, C→G.'},
+  {id:'export',name:'❷ mRNA의 이동',dur:2800,desc:'완성된 mRNA가 <b>핵공</b>을 통해 세포질로 이동합니다. 진핵생물은 전사(핵)와 번역(세포질)이 서로 다른 공간에서 일어납니다.'},
+  {id:'charge',name:'tRNA와 아미노산의 결합',dur:3000,desc:'세포질에서 <b>효소의 작용</b>으로 tRNA의 3′ 말단에 아미노산이 결합합니다. tRNA가 운반하는 아미노산의 종류는 안티코돈에 따라 정해집니다.'},
+  {id:'small',name:'❸ 리보솜 소단위체 결합',dur:2200,desc:"세포질로 나온 mRNA가 리보솜 소단위체와 결합합니다. mRNA를 5′→3′ 방향으로 읽었을 때 처음 나오는 개시 코돈 <code>AUG</code>에 메싸이오닌을 운반하는 개시 tRNA가 결합합니다."},
+  {id:'init',name:'❹ 번역(개시)',dur:1800,desc:'개시 tRNA가 mRNA의 개시 코돈에 결합한 후 리보솜 대단위체가 결합해 완전한 리보솜이 됩니다. 리보솜은 단백질과 rRNA로 이루어져 있습니다.'},
+  {id:'elong',name:'❺ 번역(신장)',dur:4600,desc:'tRNA가 운반해 온 아미노산이 펩타이드 결합을 하여 폴리펩타이드 사슬이 길어집니다. 리보솜은 mRNA를 따라 5′→3′ 방향으로 코돈 하나씩 이동합니다. E·P·A 자리에서 일어나는 일은 ‘번역 상세’에서 한 단계씩 볼 수 있습니다.'},
+  {id:'term',name:'❻ 번역(종결)',dur:2800,desc:'mRNA의 종결 코돈에 도달하면 폴리펩타이드 합성이 종결되고, 합성된 폴리펩타이드는 리보솜에서 분리됩니다. 폴리펩타이드는 구부러지고 접혀 고유한 입체 구조를 가진 단백질이 됩니다.'},
+  {id:'recycle',name:'분리와 재사용',dur:3000,desc:'번역이 끝나면 리보솜, 폴리펩타이드, tRNA, mRNA가 모두 분리됩니다. tRNA는 다시 효소의 작용으로 아미노산과 결합하고, 리보솜은 다른 번역 과정에 쓰입니다.'},
+  {id:'poly',name:'폴리솜',dur:6000,loop:true,desc:'유전자 발현이 활발한 세포에서는 리보솜이 개시 코돈을 떠나면 또 다른 리보솜이 개시 코돈에 결합해 번역을 진행합니다. 하나의 mRNA에 여러 개의 리보솜이 결합한 것을 <b>폴리솜</b>이라 하며, 짧은 시간에 많은 폴리펩타이드를 합성할 수 있습니다.'},
+];
+const PRO=[
+  {id:'p_dna',name:'원핵세포의 DNA',dur:0,desc:'원핵생물은 핵막이 없어 DNA가 세포질에 있고, 리보솜도 같은 공간에 있습니다.'},
+  {id:'p_couple',name:'전사와 번역이 동시에',dur:7000,loop:true,desc:'원핵생물은 DNA와 리보솜이 같은 공간에 있으므로, 전사가 끝나기 전에 만들어지고 있는 mRNA의 5′ 쪽에 리보솜이 결합해 번역을 시작합니다. 전사와 번역이 동시에 일어나고, 하나의 mRNA에 여러 리보솜이 붙어 폴리솜을 이룹니다.'},
+];
+const ov={kind:'euk',i:0,t:1,raf:0,auto:false,timer:0,pending:false};
+const OVS=$('ovSvg');
+const RY=400,RX0=450,RX1=890;
+const lerp=(a,b,u)=>a+(b-a)*u, clamp=u=>Math.max(0,Math.min(1,u)), ease=u=>u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2, seg=(u,a,b)=>clamp((u-a)/(b-a));
+const reduceMo=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ovSteps=()=>ov.kind==='euk'?EUK:PRO;
+const nsp=()=>Math.min(13,(RX1-RX0)/P.seq.length);
+const rsc=()=>Math.min(.72,nsp()/18);
+const ocx=k=>RX0+(P.start+3*k+1.5)*nsp();
+const f1=v=>(+v).toFixed(1);
+function lb(x,y,s,o='',cls='lbl'){return `<text x="${f1(x)}" y="${f1(y)}" class="${cls}" ${o}>${s}</text>`;}
+function beadRaw(x,y,a,r){return `<circle cx="${f1(x)}" cy="${f1(y)}" r="${r}" fill="${AACOL[a]}"/>`+(r>=7.5?`<text x="${f1(x)}" y="${f1(y+r*.27)}" text-anchor="middle" font-size="${f1(r*.68)}" font-weight="700" fill="#fff" font-family="IBM Plex Mono, monospace">${AA[a][0]}</text>`:'');}
+function trnaS(x,y,sc,k,charged,o=1){
+  const col=k===0?'var(--trna-init)':'var(--trna)';const ac=pairOf(P.codons[k]);
+  let s=`<g transform="translate(${f1(x)},${f1(y)}) scale(${sc.toFixed(3)})" opacity="${o.toFixed(2)}">`+
+  `<path d="M0,-82 L0,-96 L8,-100" fill="none" stroke="${col}" stroke-width="3" stroke-linecap="round"/>`+
+  `<circle cx="-18" cy="-58" r="8" fill="${col}" opacity=".85"/><circle cx="18" cy="-58" r="8" fill="${col}" opacity=".85"/>`+
+  `<rect x="-12" y="-86" width="24" height="66" rx="9" fill="${col}"/>`+
+  `<rect x="-27" y="-22" width="54" height="20" rx="4" fill="var(--surface)" stroke="${col}" stroke-width="2"/>`+
+  [...ac].map((b,i)=>`<text x="${(i-1)*18}" y="-8" class="ntxt tx-${b}">${b}</text>`).join('');
+  if(charged)s+=beadRaw(8,-112,CODON[P.codons[k]],11);
+  return s+'</g>';
+}
+function smallS(x,y,sc,o=1){return `<path transform="translate(${f1(x)},${f1(y)}) scale(${sc.toFixed(3)})" d="M-110,0 C-114,44 -62,56 0,56 C62,56 114,44 110,0 Z" fill="var(--ribo)" stroke="var(--ribo-edge)" stroke-width="2" opacity="${o.toFixed(2)}"/>`;}
+function largeS(x,y,sc,o=1){return `<g transform="translate(${f1(x)},${f1(y)}) scale(${sc.toFixed(3)})" opacity="${o.toFixed(2)}"><path d="M-106,0 C-126,-58 -120,-106 -88,-122 C-50,-140 50,-140 88,-122 C120,-106 126,-58 106,0 Z" fill="var(--ribo)" stroke="var(--ribo-edge)" stroke-width="2"/>${[-1,0,1].map(i=>`<rect x="${i*54-24}" y="-116" width="48" height="108" rx="22" fill="var(--ribo-2)" opacity=".55"/>`).join('')}</g>`;}
+function helix(x1,x2,y,bub){
+  let s1='',s2='',r='';
+  for(let x=x1;x<=x2;x+=4){
+    let o=0;if(bub){o=clamp(Math.min(x-bub[0],bub[1]-x)/14);}
+    const ph=Math.sin((x-x1)/14);
+    const y1=lerp(y+9*ph,y-17,o),y2=lerp(y-9*ph,y+17,o);
+    s1+=(s1?'L':'M')+x+','+f1(y1);s2+=(s2?'L':'M')+x+','+f1(y2);
+    if((x-x1)%12===0&&o<.2)r+=`<line x1="${x}" y1="${f1(y1)}" x2="${x}" y2="${f1(y2)}" stroke="var(--muted)" stroke-width="1.2" opacity=".45"/>`;
+  }
+  return r+`<path d="${s1}" fill="none" stroke="var(--dna)" stroke-width="3"/><path d="${s2}" fill="none" stroke="var(--dna-2)" stroke-width="3"/>`;
+}
+function cpts(ax,ay,n,r){const p=[[ax,ay]];let x=ax,y=ay;const d=r*1.9;for(let i=1;i<n;i++){let dx,dy;if(i<=3){dx=-d*.52;dy=-d*.85;}else{dx=-d;dy=(i%2?-.3:.3)*d;}if(x+dx<RX0-60){dx=0;dy=-d;}x+=dx;y+=dy;p.push([x,y]);}return p;}
+function foldPts(cx,cy,n,r){const p=[];for(let j=0;j<n;j++){const rr=r*1.3*Math.sqrt(j),a=j*2.4;p.push([cx+rr*Math.cos(a),cy+rr*Math.sin(a)]);}return p;}
+function senseCount(){return P.codons.length-1;}
+function protein(cx,cy,r,o=1){const n=senseCount();const pts=foldPts(cx,cy,n,r);let s=`<g opacity="${o.toFixed(2)}">`;for(let m=n-1;m>=0;m--)s+=beadRaw(pts[m][0],pts[m][1],CODON[P.codons[m]],r);return s+'</g>';}
+function inset(cnt,o){
+  const len=P.seq.length,W=Math.min(16,len),c=14,x0=62;const w0=Math.max(0,Math.min(len-W,cnt-W+3));
+  let s=`<g opacity="${o.toFixed(2)}"><rect x="24" y="268" width="282" height="100" rx="10" fill="var(--surface)" stroke="var(--line)"/>`+lb(36,287,'확대: 주형 DNA 가닥(위)과 mRNA(아래)');
+  s+=lb(56,316,"3'",'text-anchor="end"')+lb(56,350,"5'",'text-anchor="end"')+lb(x0+W*c+4,316,"5'")+lb(x0+W*c+4,350,"3'");
+  for(let q=0;q<W;q++){const n=w0+q,b=P.seq[n],tb=TPL[b],x=x0+q*c;
+    s+=`<rect x="${x}" y="300" width="${c-2}" height="20" rx="3" class="nt-${tb}" stroke-width="1"/><text x="${x+(c-2)/2}" y="314" class="ntxt tx-${tb}">${tb}</text>`;
+    if(n<cnt)s+=`<rect x="${x}" y="334" width="${c-2}" height="20" rx="3" class="nt-${b}" stroke-width="1"/><text x="${x+(c-2)/2}" y="348" class="ntxt tx-${b}">${b}</text>`;
+    if(n===cnt-1&&cnt<len)s+=`<rect x="${x-2}" y="296" width="${c+2}" height="62" rx="4" fill="none" stroke="var(--pol)" stroke-width="2"/>`;
+  }
+  return s+'</g>';
+}
+function rowMarks(){
+  const n=nsp();let s='';
+  [...P.seq].forEach((b,q)=>{
+    if(n>=8)s+=`<text x="${f1(RX0+(q+.5)*n)}" y="${RY-4}" class="ntxt tx-${b}" style="font-size:${Math.min(11,n-1).toFixed(0)}px">${b}</text>`;
+    else s+=`<rect x="${f1(RX0+q*n)}" y="${RY-9}" width="${f1(n-1)}" height="6" class="nt-${b}"/>`;
+  });
+  return s;
+}
+function drawEuk(id,t){
+  const idx=EUK.findIndex(x=>x.id===id);
+  const nC=P.codons.length, sc=rsc(), xA=ocx(0), xEnd=ocx(nC-2);
+  const tY=RY-16, lY=tY-10*sc;
+  let s='';
+  // nucleus
+  s+=`<ellipse cx="160" cy="250" rx="175" ry="215" fill="var(--nuc)" stroke="var(--nuc-edge)" stroke-width="3"/>`;
+  s+=`<ellipse cx="160" cy="250" rx="166" ry="206" fill="none" stroke="var(--nuc-edge)" stroke-width="1" stroke-dasharray="3 4" opacity=".7"/>`;
+  s+=`<rect x="323" y="238" width="24" height="24" fill="var(--surface-2)"/><rect x="327" y="225" width="14" height="14" rx="4" fill="var(--nuc-edge)"/><rect x="327" y="261" width="14" height="14" rx="4" fill="var(--nuc-edge)"/>`;
+  s+=lb(48,70,'핵','style="font-size:15px;fill:var(--ink)"')+lb(915,40,'세포질','text-anchor="end" style="font-size:15px;fill:var(--ink)"')+lb(352,296,'핵공');
+  // DNA + transcription
+  const xp=id==='tx'?lerp(70,272,ease(t)):null;
+  s+=helix(36,292,150,xp!=null?[xp-34,xp+16]:null)+lb(36,120,'DNA');
+  if(idx<=2){
+    const end=id==='tx'?xp:(id==='dna'?0:272);const u=id==='export'?ease(seg(t,0,.55)):0;
+    if(end>74){let d='';for(let x=70;x<=end;x+=4){const y=168+Math.min(72,(end-x)*.42)+3*Math.sin(x/8);d+=(d?'L':'M')+x+','+f1(y);}
+      s+=`<g transform="translate(${f1(u*130)},${f1(u*70)})" opacity="${(1-u).toFixed(2)}"><path d="${d}" fill="none" stroke="var(--mrna)" stroke-width="4" stroke-linecap="round"/>${lb(64,262,'mRNA','style="fill:var(--mrna)"')}</g>`;}
+    if(id==='tx')s+=`<ellipse cx="${f1(xp)}" cy="150" rx="30" ry="20" fill="var(--pol)" opacity=".92"/>`+lb(xp,123,'RNA 중합 효소','text-anchor="middle" style="fill:var(--pol)"');
+    const cnt=id==='dna'?0:id==='tx'?Math.floor(ease(t)*P.seq.length+1e-6):P.seq.length;
+    s+=inset(cnt,id==='export'?1-seg(t,0,.5):1);
+  }
+  // cytoplasm mRNA
+  if(idx>=2){
+    const u=id==='export'?ease(seg(t,.15,1)):1;
+    s+=`<path d="M335,250 C385,250 380,110 450,110 L880,110 C945,110 945,${RY} 880,${RY} L440,${RY}" pathLength="1000" fill="none" stroke="var(--mrna)" stroke-width="5" stroke-linecap="round" stroke-dasharray="1000 1000" stroke-dashoffset="${f1(1000*(1-u))}"/>`;
+    if(u>=1){
+      s+=lb(432,RY+5,"5'",'text-anchor="end"','lblb')+lb(350,240,"3'",'','lblb')+lb(640,100,'mRNA','style="fill:var(--mrna)"');
+      s+=rowMarks();
+      if(idx<=8){s+=lb(xA,RY+66,'개시 코돈','text-anchor="middle"')+lb(ocx(nC-1),RY+66,'종결 코돈','text-anchor="middle" style="fill:var(--bad)"');}
+    }
+  }
+  // ribosome subunits
+  if(idx>=2&&idx<=8){
+    let so=1,lo=1, sx=832,sy=258,ssc=.45, lx=832,ly=236,lsc=.45;
+    if(id==='export'){so=lo=seg(t,.4,1);}
+    if(idx>=4){const u=id==='small'?ease(seg(t,0,.8)):1;sx=lerp(832,xA,u);sy=lerp(258,RY+4,u);ssc=lerp(.45,sc,u);}
+    if(idx>=5){const u=id==='init'?ease(t):1;lx=lerp(832,xA,u);ly=lerp(236,lY,u);lsc=lerp(.45,sc,u);}
+    if(idx>=6){const x=id==='elong'?lerp(xA,xEnd,ease(t)):xEnd;sx=lx=x;}
+    if(id==='recycle'){const u=ease(seg(t,0,.6));sy=lerp(RY+4,RY+30,u);ly=lerp(lY,lY-70,u);sx=lerp(xEnd,xEnd+30,u);lx=lerp(xEnd,xEnd+30,u);so=lo=1-.55*u;}
+    s+=largeS(lx,ly,lsc,lo)+smallS(sx,sy,ssc,so);
+    if(idx<=4&&id!=='small')s+=lb(832,302,'리보솜 대단위체·','text-anchor="middle"')+lb(832,316,'소단위체 (떨어져 있음)','text-anchor="middle"');
+    if(id==='recycle'&&t>.5)s+=lb(xEnd+30,RY+86,'리보솜은 다른 번역에 다시 쓰임','text-anchor="middle"');
+  }
+  // charging zone
+  const uniq=[];{const seen=new Set();for(let k=0;k<nC-1&&uniq.length<4;k++){if(!seen.has(P.codons[k])){seen.add(P.codons[k]);uniq.push(k);}}}
+  if(idx>=2&&idx<=6){
+    const n=uniq.length;
+    uniq.forEach((k,j)=>{
+      const x=474+j*80,y=300,zs=.62;
+      let o=1;if(id==='export')o=seg(t,.4,1);if(id==='elong')o=1-.75*t;
+      let aaU=0;if(id==='charge')aaU=ease(seg(t,j/n*.7,j/n*.7+.3));else if(idx>3)aaU=1;
+      if(j===0&&idx>=4){if(id==='small'){const u=ease(seg(t,.25,1));s+=trnaS(lerp(x,xA,u),lerp(y,tY,u),lerp(zs,sc,u),k,true);}return;}
+      const ax=x+46,ay=184,tx_=x+8*zs,ty_=y-112*zs;
+      s+=trnaS(x,y,zs,k,false,o);
+      s+=`<g opacity="${o.toFixed(2)}">${beadRaw(lerp(ax,tx_,aaU),lerp(ay,ty_,aaU),CODON[P.codons[k]],8)}</g>`;
+      if(id==='charge'&&aaU>0&&aaU<1)s+=`<ellipse cx="${f1(x+34)}" cy="${f1(ty_+4)}" rx="22" ry="12" fill="var(--enz)" opacity=".9"/>`+lb(x+34,ty_+8,'효소','text-anchor="middle" style="fill:#fff"');
+    });
+    if(idx<=3)s+=lb(470,160,id==='charge'?'효소가 tRNA의 3′ 말단에 아미노산을 붙임':'tRNA와 아미노산');
+  }
+  // ribosome-bound tRNAs & chain
+  const R11=11*sc;
+  if(id==='init'){s+=trnaS(xA,tY,sc,0,true);}
+  if(id==='elong'){
+    const prog=ease(t)*(nC-2), k=Math.min(nC-2,Math.floor(prog+1e-6)), fr=prog-k, x=lerp(xA,xEnd,ease(t));
+    s+=trnaS(x,tY,sc,k,false);
+    if(k<nC-2&&fr>.12&&fr<.9)s+=trnaS(x+54*sc,tY,sc,k+1,true,Math.min(1,(fr-.12)*5,(.9-fr)*8));
+    const pts=cpts(x+8*sc,tY-112*sc,k+1,R11);
+    for(let m=0;m<=k;m++){const p=pts[k-m];s+=beadRaw(p[0],p[1],CODON[P.codons[m]],R11);}
+  }
+  if(id==='term'||id==='recycle'){
+    const k=nC-2;
+    if(id==='term'){
+      s+=trnaS(xEnd,tY,sc,k,false);
+      const ro=Math.min(1,t*4);s+=`<g opacity="${ro.toFixed(2)}"><rect x="${f1(xEnd+54*sc-16*sc)}" y="${f1(tY-104*sc)}" width="${f1(32*sc)}" height="${f1(102*sc)}" rx="${f1(10*sc)}" fill="var(--rf)"/></g>`+lb(xEnd+54*sc+18*sc,tY-60*sc,'방출 인자','style="fill:var(--rf)"');
+      const u=ease(seg(t,.3,1));const pts=cpts(xEnd+8*sc,tY-112*sc,k+1,R11);const fp=foldPts(700,215,k+1,9);
+      for(let m=k;m>=0;m--){const a=pts[k-m],b=fp[m];s+=beadRaw(lerp(a[0],b[0],u),lerp(a[1],b[1],u),CODON[P.codons[m]],lerp(R11,9,u));}
+      if(u>.85)s+=lb(700,170,'단백질 (고유한 입체 구조)','text-anchor="middle" style="fill:var(--ink)"');
+    }else{
+      s+=protein(700,215,9)+lb(700,170,'단백질 (고유한 입체 구조)','text-anchor="middle" style="fill:var(--ink)"');
+      const u=ease(seg(t,0,.5));const x=lerp(xEnd,520,u),y=lerp(tY,290,u),zs=lerp(sc,.62,u);
+      s+=trnaS(x,y,zs,k,false);
+      const v=ease(seg(t,.55,1));const a=CODON[P.codons[k]];
+      if(t>.5){s+=beadRaw(lerp(x+60,x+8*zs,v),lerp(190,y-112*zs,v),a,8);if(v<1)s+=`<ellipse cx="${f1(x+36)}" cy="${f1(y-112*zs+6)}" rx="22" ry="12" fill="var(--enz)" opacity=".9"/>`+lb(x+36,y-112*zs+10,'효소','text-anchor="middle" style="fill:#fff"');}
+      s+=lb(470,160,'tRNA는 다시 아미노산과 결합해 재사용');
+    }
+  }
+  if(id==='poly'){
+    const xs=RX0+20,xe=RX1-30,N=3,ps=.48;
+    s+=protein(620,205,8)+protein(770,215,8,.8);
+    for(let j=0;j<N;j++){
+      const f=(t+j/N)%1,x=lerp(xs,xe,f),o=Math.max(0,Math.min(1,f/.07,(1-f)/.08));
+      const k=Math.min(nC-2,Math.floor(f*(nC-1)));
+      s+=`<g opacity="${o.toFixed(2)}">`+largeS(x,tY-10*ps,ps)+smallS(x,RY+4,ps)+trnaS(x,tY,ps,k,false);
+      const pts=cpts(x+8*ps,tY-112*ps,k+1,6.5);
+      for(let m=0;m<=k;m++){const p=pts[k-m];s+=beadRaw(p[0],p[1],CODON[P.codons[m]],6.5);}
+      s+='</g>';
+    }
+    s+=lb((xs+xe)/2,RY+70,'하나의 mRNA에 여러 리보솜이 결합 = 폴리솜','text-anchor="middle" style="fill:var(--ink)"');
+  }
+  return s;
+}
+function drawPro(id,t){
+  let s=`<rect x="14" y="22" width="932" height="460" rx="70" fill="none" stroke="var(--nuc-edge)" stroke-width="2" stroke-dasharray="8 6"/>`;
+  s+=lb(50,56,'원핵세포 — 핵막이 없음','style="font-size:15px;fill:var(--ink)"');
+  const xp=id==='p_dna'?null:lerp(150,870,t);
+  s+=helix(60,920,120,xp!=null?[xp-34,xp+16]:null)+lb(60,92,'DNA (세포질에 있음)');
+  if(id==='p_dna'){
+    [[300,330],[520,380],[740,320]].forEach(([x,y])=>{s+=largeS(x,y-4,.45)+smallS(x,y,.45);});
+    return s+lb(520,450,'리보솜 (DNA와 같은 공간에 있음)','text-anchor="middle"');
+  }
+  const L=xp-150,dl=(440-140)/.55;
+  const pt=d=>d<=dl?[xp-d*.8,140+d*.55]:[xp-dl*.8-(d-dl),440];
+  let d='';for(let q=0;q<=L;q+=6){const p=pt(q);d+=(d?'L':'M')+f1(p[0])+','+f1(p[1]);}
+  if(L>8){s+=`<path d="${d}" fill="none" stroke="var(--mrna)" stroke-width="4" stroke-linecap="round"/>`;const e=pt(L);s+=lb(e[0]-8,e[1]+4,"5'",'text-anchor="end"','lblb');}
+  const sense=P.codons.slice(0,-1);let firstRibo=null;
+  for(let j=0;j<6;j++){
+    const tj=.1+j*.16;if(t<=tj)continue;
+    const d5=(t-tj)*360,dd=L-d5;if(dd<46)continue;
+    const p=pt(dd);if(!firstRibo)firstRibo=p;
+    s+=largeS(p[0],p[1]-3,.26)+smallS(p[0],p[1]+3,.26);
+    const nb=Math.min(9,1+Math.floor(d5/28));
+    for(let m=0;m<nb;m++){const a=CODON[sense[m%sense.length]];s+=beadRaw(p[0]+16+m*7.5,p[1]+20+m*9,a,5.5);}
+  }
+  s+=`<ellipse cx="${f1(xp)}" cy="120" rx="30" ry="20" fill="var(--pol)" opacity=".92"/>`+lb(xp,92,'RNA 중합 효소','text-anchor="middle" style="fill:var(--pol)"');
+  if(L>120){const m=pt(Math.min(L*.25,200));s+=lb(m[0]+14,m[1]-8,'mRNA (전사 중)','style="fill:var(--mrna)"');}
+  if(firstRibo)s+=lb(firstRibo[0]-26,firstRibo[1]-24,'리보솜','text-anchor="end"');
+  return s;
+}
+function ovRender(){const st=ovSteps()[ov.i];OVS.innerHTML=ov.kind==='euk'?drawEuk(st.id,ov.t):drawPro(st.id,ov.t);}
+function ovPanel(){
+  const steps=ovSteps(),st=steps[ov.i];
+  $('ovName').textContent=st.name;$('ovDesc').innerHTML=st.desc;
+  $('ovProg').textContent=`단계 ${ov.i+1} / ${steps.length}`;
+  $('ovPrev').disabled=ov.i===0;$('ovNext').disabled=ov.i===steps.length-1;
+  $('ovReplay').disabled=!st.dur;
+  $('ovToDetail').hidden=!(st.id==='elong'||st.id==='init'||st.id==='term');
+  $('ovAuto').textContent=ov.auto?'일시 정지':'자동 재생';
+  $('ovSteps').innerHTML='';
+  steps.forEach((x,j)=>{const li=document.createElement('li');const b=document.createElement('button');b.type='button';b.textContent=x.name;if(j===ov.i)b.className='cur';b.addEventListener('click',()=>{ovStopAuto();ovGo(j);});li.appendChild(b);$('ovSteps').appendChild(li);});
+}
+function ovPlay(){
+  cancelAnimationFrame(ov.raf);
+  const st=ovSteps()[ov.i];
+  if(!st.dur||reduceMo()){ov.t=st.loop&&reduceMo()?.55:1;ovRender();ovAfter();return;}
+  const t0=performance.now(),dur=st.dur;
+  const tick=now=>{
+    const u=(now-t0)/dur;ov.t=st.loop?u%1:Math.min(1,u);ovRender();
+    if(!st.loop){if(u>=1){ovAfter();return;}}
+    else if(u>=1&&ov.auto&&!ov.pending){ovAfter();}
+    ov.raf=requestAnimationFrame(tick);
+  };
+  ov.raf=requestAnimationFrame(tick);
+}
+function ovAfter(){
+  if(!ov.auto||ov.pending)return;
+  if(ov.i<ovSteps().length-1){ov.pending=true;ov.timer=setTimeout(()=>{ov.pending=false;ovGo(ov.i+1);},1100);}
+  else{ov.auto=false;ovPanel();}
+}
+function ovGo(i){clearTimeout(ov.timer);ov.pending=false;ov.i=Math.max(0,Math.min(ovSteps().length-1,i));ovPanel();ovPlay();}
+function ovStopAuto(){ov.auto=false;clearTimeout(ov.timer);ov.pending=false;$('ovAuto').textContent='자동 재생';}
+function ovReload(){if(!P)return;ovPanel();ovPlay();}
+$('ovNext').addEventListener('click',()=>{ovStopAuto();ovGo(ov.i+1);});
+$('ovPrev').addEventListener('click',()=>{ovStopAuto();ovGo(ov.i-1);});
+$('ovReset').addEventListener('click',()=>{ovStopAuto();ovGo(0);});
+$('ovReplay').addEventListener('click',()=>ovPlay());
+$('ovAuto').addEventListener('click',()=>{if(ov.auto){ovStopAuto();return;}ov.auto=true;if(ov.i===ovSteps().length-1)ov.i=0;ovGo(ov.i);});
+function setKind(k){ovStopAuto();ov.kind=k;ov.i=k==='pro'?1:0;$('kEuk').setAttribute('aria-pressed',k==='euk');$('kPro').setAttribute('aria-pressed',k==='pro');ovGo(ov.i);}
+$('kEuk').addEventListener('click',()=>setKind('euk'));
+$('kPro').addEventListener('click',()=>setKind('pro'));
+function showTab(which){
+  const isOv=which==='ov';
+  $('tabOv').hidden=!isOv;$('tabDt').hidden=isOv;
+  $('tabBtnOv').setAttribute('aria-selected',isOv);$('tabBtnDt').setAttribute('aria-selected',!isOv);
+  if(isOv){ovPlay();}else{cancelAnimationFrame(ov.raf);ovStopAuto();render();}
+}
+$('tabBtnOv').addEventListener('click',()=>showTab('ov'));
+$('tabBtnDt').addEventListener('click',()=>showTab('dt'));
+$('ovToDetail').addEventListener('click',()=>{showTab('dt');window.scrollTo({top:$('tabDt').offsetTop-80,behavior:'smooth'});});
+
+/* order quiz */
+const ORDER=['핵에서 DNA의 유전 정보가 mRNA로 전달된다.','mRNA가 핵공을 통해 세포질로 이동한다.','mRNA가 리보솜 소단위체와 결합하고, 개시 tRNA가 개시 코돈 AUG에 결합한다.','리보솜 대단위체가 결합해 완전한 리보솜이 된다.','tRNA가 운반해 온 아미노산이 펩타이드 결합을 하여 폴리펩타이드가 길어진다.','종결 코돈에 도달하면 폴리펩타이드가 리보솜에서 분리된다.'];
+let oqNext=0;
+function oqReset(){
+  let ord;do{ord=ORDER.map((_,i)=>i).sort(()=>Math.random()-.5);}while(ord.every((v,i)=>v===i));
+  oqNext=0;$('ordFb').textContent='';$('ordList').innerHTML='';
+  ord.forEach(i=>{const b=document.createElement('button');b.type='button';b.innerHTML=`<span class="num"></span><span>${ORDER[i]}</span>`;
+    b.addEventListener('click',()=>{
+      if(b.classList.contains('done'))return;
+      if(i===oqNext){b.classList.add('done');b.querySelector('.num').textContent=i+1;oqNext++;
+        const f=$('ordFb');if(oqNext===ORDER.length){f.textContent='완성! 전사 → 이동 → 개시 → 신장 → 종결 순서입니다.';f.className='fb ok';}else{f.textContent='맞았습니다. 다음 단계를 고르세요.';f.className='fb ok';}}
+      else{b.classList.remove('wrong');void b.offsetWidth;b.classList.add('wrong');const f=$('ordFb');f.textContent=`${oqNext+1}번째 단계가 아닙니다. 위의 그림 단계를 참고하세요.`;f.className='fb no';}
+    });
+    $('ordList').appendChild(b);});
+}
+$('ordReset').addEventListener('click',oqReset);
+oqReset();
+
+/* ---------- boot ---------- */
+$('seqIn').value=PRESETS[0].seq;
+load(PRESETS[0].seq,'mrna');
+})();
+</script>
+
+</body></html>
